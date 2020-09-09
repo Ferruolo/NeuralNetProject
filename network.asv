@@ -1,0 +1,138 @@
+classdef network
+    %UNTITLED Summary of this class goes here
+    %   Detailed explanation goes here
+    
+    properties
+        output;
+        layers = [lay_wrapper(layer("null", "null", 0, 0, 0))];
+        update_fxn;
+    end
+    
+    methods
+        function obj = network(architecture, update_fxn)
+            
+            for i = 1:length(architecture)
+                obj.layers(length(obj.layers)+ 1) = architecture(i); 
+                
+                
+                %This language makes it dumb hard to write high-level
+                %interfaces. Yuck. C++ for the win next time.
+
+            end    
+            obj.layers = obj.layers(2:end);
+            obj.update_fxn = update_fxn;
+            
+        end
+        
+        function [obj] = net_forward(obj, x)
+            
+            y = x;
+            for i = 1:length(obj.layers)
+                
+                y = lw_forward(obj.layers(i), y);
+%                 disp("-------forward shit---");
+%                 disp(size(y.value));
+%                 disp(size(obj.layers(i).weights.value));
+            end
+%             disp(size(y.value));
+            obj.output = y;
+        end
+        function obj = net_backwards(obj, loss_grad)
+%             disp("obj.output");
+%             disp(obj.output);
+            grad = ih_grad(obj.output);
+%             disp("GRADIENT");
+%             disp(grad);
+%             disp("starting B grad");
+%             disp(size(grad.B_grad));
+%             disp(size(loss_grad));
+%             disp("_____{_{{_{_{}_}_}_}_");
+%             
+            
+            
+            
+            running_grad =  loss_grad;
+  
+            
+                 %Probably some hack code, but it seems to work universally
+                %for the purpose of this project.
+                %looking at the graph (you can do that yourself), you wil
+                %find that for each layer, there is mult, add, activate.
+                %Using this knowledge, we know that if the current grad
+                %node is of type "k_mult," the next grad will be of a
+                %different layer, and if the node is of type "logistic" or
+                %another activation function, there will be two more grad
+                %nodes in the same layer. This allows me to use the < and
+                %== logic that you see below. I have tested this with a
+                %very verbose print, and it seems to work, even for the
+                %conv layers.            
+            for i = 1:length(obj.output.graph)-1
+                dex = length(obj.output.graph) - (i-1);
+
+                disp("-_-_-_-");          
+                disp(grad);
+disp("****RUN*****");
+
+                disp(size(running_grad))
+                
+                
+                disp("_-_-_-_");
+                if grad.A.layer < grad.layer
+ 
+                    if grad.flipped
+
+                        cell_grad =     running_grad * transpose(grad.B_grad);
+                        running_grad =   * transpose(grad.A_grad)* running_grad ; 
+
+                        obj.layers(grad.layer) = lw_backward_mul(obj.layers(grad.layer), obj.update_fxn, cell_grad);                        
+                    else
+                        cell_grad =   transpose(grad.B_grad) * running_grad ;
+                        running_grad =   running_grad * transpose(grad.A_grad);                       
+                        
+
+                        obj.layers(grad.layer) = lw_backward_mul(obj.layers(grad.layer), obj.update_fxn, cell_grad); 
+                    end
+                    
+                    
+                    
+
+                    
+                else
+                    if grad.A.layer == grad.layer && grad.A.A.layer < grad.layer
+  
+                        obj.layers(grad.layer) = lw_backward_add(obj.layers(grad.layer), obj.update_fxn, running_grad); 
+                    else
+                        if grad.A.A.layer == grad.layer
+                          running_grad =  grad.B_grad .* running_grad; 
+                        end
+                    end
+                end
+                grad = grad.A;
+                
+            end
+        end
+        function obj = train(obj, data, epochs, loss_fxn)
+            for i = 1:epochs
+                
+                for k = 1:length(data)
+              
+                    obj = net_forward(obj, data(k).img);
+%                     disp("-----------");
+%                     for j = 1:length(obj.output.graph)
+%                          disp(obj.output.graph(j));
+%                     end
+%                     disp("-----------");
+%                    disp(obj.output.value);
+%                    disp(data(k).label.value);
+                    loss = loss_fxn.compute(obj.output, data(k).label);
+                    nabla_loss = loss_fxn.grad_loss(obj.output, data(k).label);
+%                    disp(nabla_loss);
+                    obj = net_backwards(obj, nabla_loss);
+                    disp("Epoch: " + string(i) + " Item: " +  string(k) + " Loss: " + string(loss));  
+                end
+            end
+        end
+        
+    end
+end
+
